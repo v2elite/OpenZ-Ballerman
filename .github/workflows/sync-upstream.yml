@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: upstream-sync
@@ -20,8 +21,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          persist-credentials: true
-      - name: Merge upstream without discarding fork changes
+      - name: Merge upstream without overwriting fork changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -29,3 +29,17 @@ jobs:
           git fetch upstream main
           git merge --no-edit --no-ff upstream/main
           git push origin HEAD:main
+      - name: Propose updates for the Codex development branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch origin main development
+          if git merge-base --is-ancestor origin/main origin/development; then
+            echo "Development is already up-to-date"
+            exit 0
+          fi
+          if ! gh pr list --base development --head main --state open --json number --jq 'length' | grep -qx '[1-9][0-9]*'; then
+            gh pr create --base development --head main \
+              --title "Integrate upstream updates into development" \
+              --body "Review and merge upstream changes into the Codex development branch. Never force-merge conflicts. Tests and manual validation may be needed."
+          fi
